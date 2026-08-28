@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تطبيق الميزانية الشخصية</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f8f9fa; margin: 0; padding: 15px; color: #212529; }
+    .card { background: white; padding: 16px; border-radius: 14px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    h2, h3 { margin-top: 0; color: #1a252f; }
+    .balance { font-size: 26px; font-weight: bold; color: #2c3e50; margin: 8px 0; }
+    input, select, button { width: 100%; padding: 12px; margin: 6px 0; border: 1px solid #ced4da; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
+    button { background: #e65c00; color: white; border: none; font-weight: bold; cursor: pointer; }
+    .btn-logout { background: #6c757d; padding: 6px 12px; width: auto; font-size: 12px; }
+    .btn-export { background: #0d6efd; margin-top: 5px; }
+    .item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f3f5; }
+    .income-text { color: #198754; font-weight: bold; }
+    .expense-text { color: #dc3545; font-weight: bold; }
+    .progress-bar { background: #e9ecef; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 8px; }
+    .progress-fill { background: #e65c00; height: 100%; width: 0%; transition: width 0.3s; }
+  </style>
+</head>
+<body>
+
+  <!-- شاشة الدخول بالإيميل -->
+  <div id="authScreen" class="card" style="max-width: 400px; margin: 30px auto; text-align: center;">
+    <h2 style="color: #e65c00;">ميزانية - الدخول لحسابك</h2>
+    <p style="color: #666;">أدخل بريدك الإلكتروني لحفظ بياناتك واسترجاعها في أي وقت</p>
+    <input type="email" id="userEmailInput" placeholder="البريد الإلكتروني (مثال: user@mail.com)">
+    <input type="password" id="userPassInput" placeholder="كلمة المرور">
+    <button onclick="login()">تسجيل الدخول / إنشاء حساب</button>
+  </div>
+
+  <!-- شاشة التطبيق الرئيسية -->
+  <div id="appScreen" style="display: none; max-width: 500px; margin: 0 auto;">
+    
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+      <div><small>الحساب الحالي:</small> <strong id="activeUserEmail"></strong></div>
+      <button class="btn-logout" onclick="logout()">خروج</button>
+    </div>
+
+    <div class="card">
+      <small style="color: #6c757d;">صافي الرصيد</small>
+      <div class="balance"><span id="balance">0.00</span> ر.س</div>
+      
+      <div style="display: flex; gap: 10px; margin: 10px 0;">
+        <div style="flex: 1; background: #e8f8f5; padding: 10px; border-radius: 8px;">
+          <small style="color: #198754;">إجمالي الدخل</small>
+          <div class="income-text" id="totalIncome">+0 ر.س</div>
+        </div>
+        <div style="flex: 1; background: #fadbd8; padding: 10px; border-radius: 8px;">
+          <small style="color: #dc3545;">إجمالي المصاريف</small>
+          <div class="expense-text" id="totalExpense">-0 ر.س</div>
+        </div>
+      </div>
+
+      <div style="margin-top: 10px;">
+        <small>سقف المصاريف الشهري (ر.س):</small>
+        <input type="number" id="budgetLimit" placeholder="حدد الحد الأقصى للمصاريف" onchange="updateLimit()">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>إضافة عملية جديدة</h3>
+      <select id="type" onchange="updateCategories()">
+        <option value="expense">مصروف</option>
+        <option value="income">دخل</option>
+      </select>
+      <select id="category"></select>
+      <input type="number" id="amount" placeholder="المبلغ (ر.س)">
+      <input type="text" id="desc" placeholder="الوصف (مثال: مقاضي)">
+      
+      <label style="font-size: 12px; color: #555; display: block; margin-top: 5px;">تاريخ العملية:</label>
+      <input type="date" id="txDate">
+
+      <button onclick="addTransaction()">حفظ العملية</button>
+    </div>
+
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h3 style="margin:0;">سجل العمليات</h3>
+        <button class="btn-export" style="width:auto; padding:6px 12px; font-size:12px;" onclick="exportCSV()">تصدير CSV</button>
+      </div>
+      <div id="list"></div>
+    </div>
+
+  </div>
+
+  <script>
+    let currentUser = localStorage.getItem('active_user') || null;
+    let transactions = [];
+    let limit = 0;
+
+    const categories = {
+      income: ['الراتب الشهري', 'دخل إضافي', 'أخرى'],
+      expense: ['فواتير', 'تسوق', 'مطاعم', 'ترفيه', 'إيجار', 'صحة', 'مقاضي منزلية', 'أخرى']
+    };
+
+    // تعيين تاريخ اليوم كخيار افتراضي في خانة التاريخ
+    document.getElementById('txDate').valueAsDate = new Date();
+
+    function login() {
+      const email = document.getElementById('userEmailInput').value.trim().toLowerCase();
+      if (!email) return alert('الرجاء إدخال البريد الإلكتروني');
+      currentUser = email;
+      localStorage.setItem('active_user', currentUser);
+      initUserSession();
+    }
+
+    function logout() {
+      localStorage.removeItem('active_user');
+      currentUser = null;
+      document.getElementById('authScreen').style.display = 'block';
+      document.getElementById('appScreen').style.display = 'none';
+    }
+
+    function initUserSession() {
+      document.getElementById('authScreen').style.display = 'none';
+      document.getElementById('appScreen').style.display = 'block';
+      document.getElementById('activeUserEmail').innerText = currentUser;
+
+      transactions = JSON.parse(localStorage.getItem(`budget_${currentUser}`)) || [];
+      limit = parseFloat(localStorage.getItem(`limit_${currentUser}`)) || 0;
+      updateCategories();
+      render();
+    }
+
+    function updateCategories() {
+      const type = document.getElementById('type').value;
+      const catSelect = document.getElementById('category');
+      catSelect.innerHTML = categories[type].map(c => `<option value="${c}">${c}</option>`).join('');
+    }
+
+    function addTransaction() {
+      const type = document.getElementById('type').value;
+      const category = document.getElementById('category').value;
+      const amount = parseFloat(document.getElementById('amount').value);
+      const desc = document.getElementById('desc').value || category;
+      const customDate = document.getElementById('txDate').value || new Date().toISOString().split('T')[0];
+
+      if (!amount) return;
+
+      transactions.unshift({ id: Date.now(), type, category, amount, desc, date: customDate });
+      localStorage.setItem(`budget_${currentUser}`, JSON.stringify(transactions));
+      document.getElementById('amount').value = '';
+      document.getElementById('desc').value = '';
+      document.getElementById('txDate').valueAsDate = new Date();
+      render();
+    }
+
+    function updateLimit() {
+      limit = parseFloat(document.getElementById('budgetLimit').value) || 0;
+      localStorage.setItem(`limit_${currentUser}`, limit);
+      render();
+    }
+
+    function render() {
+      const list = document.getElementById('list');
+      list.innerHTML = '';
+      let totalIncome = 0, totalExpense = 0;
+
+      transactions.forEach(t => {
+        if (t.type === 'income') totalIncome += t.amount;
+        else totalExpense += t.amount;
+
+        list.innerHTML += `
+          <div class="item">
+            <div><strong>${t.category}</strong> - <small>${t.desc}</small><br><small style="color:#888;">📅 ${t.date}</small></div>
+            <div class="${t.type === 'income' ? 'income-text' : 'expense-text'}">${t.type === 'income' ? '+' : '-'}${t.amount} ر.س</div>
+          </div>`;
+      });
+
+      document.getElementById('balance').innerText = (totalIncome - totalExpense).toFixed(2);
+      document.getElementById('totalIncome').innerText = `+${totalIncome} ر.س`;
+      document.getElementById('totalExpense').innerText = `-${totalExpense} ر.س`;
+      document.getElementById('budgetLimit').value = limit || '';
+
+      if (limit > 0) {
+        const perc = Math.min((totalExpense / limit) * 100, 100);
+        const fill = document.getElementById('progressFill');
+        fill.style.width = perc + '%';
+        fill.style.background = perc >= 100 ? '#dc3545' : '#e65c00';
+      }
+    }
+
+    function exportCSV() {
+      let csv = 'التاريخ,النوع,التصنيف,الوصف,المبلغ\n';
+      transactions.forEach(t => { csv += `${t.date},${t.type === 'income' ? 'دخل' : 'مصروف'},${t.category},${t.desc},${t.amount}\n`; });
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `ميزانية_${currentUser}.csv`;
+      a.click();
+    }
+
+    if (currentUser) initUserSession();
+  </script>
+</body>
+</html>
