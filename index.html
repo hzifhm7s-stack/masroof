@@ -136,6 +136,10 @@
       width: 100%; padding: 14px; background: #f97316; color: white; border: none;
       border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 10px;
     }
+    button.btn-secondary {
+      width: 100%; padding: 10px; background: #e2e8f0; color: #475569; border: none;
+      border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 6px;
+    }
     button.btn-export { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; }
 
     .toggle-auth {
@@ -148,12 +152,19 @@
       font-weight: 600;
     }
 
-    /* List Items */
+    /* List Items & Action Buttons */
     .item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
     .item:last-child { border-bottom: none; }
     .item-title { font-weight: 600; font-size: 14px; color: #1e293b; }
     .item-sub { font-size: 12px; color: #64748b; margin-top: 2px; }
+    .item-right { text-align: left; }
     .item-amount { font-weight: 700; font-size: 15px; }
+    .item-actions { display: flex; gap: 8px; margin-top: 4px; justify-content: flex-end; }
+    .btn-action {
+      background: none; border: none; font-size: 12px; cursor: pointer; padding: 2px 6px; border-radius: 4px;
+    }
+    .btn-edit { color: #2563eb; background: #eff6ff; }
+    .btn-delete { color: #dc2626; background: #fef2f2; }
   </style>
 </head>
 <body>
@@ -214,9 +225,9 @@
       </div>
     </div>
 
-    <!-- نموذج الإضافة -->
-    <div class="card">
-      <h3>إضافة عملية جديدة</h3>
+    <!-- نموذج الإضافة والتعديل -->
+    <div class="card" id="formCard">
+      <h3 id="formTitle">إضافة عملية جديدة</h3>
       
       <div class="type-selector">
         <button id="btnExpense" class="type-btn active expense" onclick="setType('expense')">🔴 مصروف</button>
@@ -224,6 +235,7 @@
       </div>
 
       <input type="hidden" id="type" value="expense">
+      <input type="hidden" id="editingId" value="">
 
       <label>التصنيف:</label>
       <select id="category"></select>
@@ -237,7 +249,8 @@
       <label>التاريخ:</label>
       <input type="date" id="txDate">
 
-      <button class="btn-primary" onclick="addTransaction()">حفظ العملية</button>
+      <button class="btn-primary" id="saveBtn" onclick="addTransaction()">حفظ العملية</button>
+      <button class="btn-secondary" id="cancelEditBtn" onclick="resetForm()" style="display: none;">إلغاء التعديل</button>
     </div>
 
     <!-- السجل -->
@@ -289,7 +302,6 @@
     if (!email || !password) return alert('الرجاء إدخال البريد الإلكتروني وكلمة المرور!');
     if (usersDb[email]) return alert('هذا البريد الإلكتروني مسجل بالفعل، الرجاء تسجيل الدخول!');
 
-    // حفظ المستخدم الجديد
     usersDb[email] = password;
     localStorage.setItem('users_db', JSON.stringify(usersDb));
 
@@ -305,7 +317,6 @@
 
     if (!email || !password) return alert('الرجاء إدخال البريد الإلكتروني وكلمة المرور!');
     
-    // التحقق من وجود البريد وكلمة المرور
     if (!usersDb[email]) {
       return alert('البريد الإلكتروني غير مسجل! يرجى اضغط على "إنشاء حساب جديد".');
     }
@@ -361,15 +372,60 @@
     const amount = parseFloat(document.getElementById('amount').value);
     const desc = document.getElementById('desc').value || category;
     const customDate = document.getElementById('txDate').value || new Date().toISOString().split('T')[0];
+    const editingId = document.getElementById('editingId').value;
 
-    if (!amount) return;
+    if (!amount) return alert('الرجاء إدخال المبلغ');
 
-    transactions.unshift({ id: Date.now(), type, category, amount, desc, date: customDate });
+    if (editingId) {
+      // تعديل عملية سابقة
+      const index = transactions.findIndex(t => t.id == editingId);
+      if (index !== -1) {
+        transactions[index] = { id: Number(editingId), type, category, amount, desc, date: customDate };
+      }
+    } else {
+      // إضافة عملية جديدة
+      transactions.unshift({ id: Date.now(), type, category, amount, desc, date: customDate });
+    }
+
     localStorage.setItem(`budget_${currentUser}`, JSON.stringify(transactions));
+    resetForm();
+    render();
+  }
+
+  function editTransaction(id) {
+    const t = transactions.find(item => item.id === id);
+    if (!t) return;
+
+    setType(t.type);
+    document.getElementById('editingId').value = t.id;
+    document.getElementById('category').value = t.category;
+    document.getElementById('amount').value = t.amount;
+    document.getElementById('desc').value = t.desc;
+    document.getElementById('txDate').value = t.date;
+
+    document.getElementById('formTitle').innerText = 'تعديل العملية';
+    document.getElementById('saveBtn').innerText = 'تحديث العملية';
+    document.getElementById('cancelEditBtn').style.display = 'block';
+
+    document.getElementById('formCard').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function deleteTransaction(id) {
+    if (confirm('هل أنت تأكد من حذف هذه العملية؟')) {
+      transactions = transactions.filter(t => t.id !== id);
+      localStorage.setItem(`budget_${currentUser}`, JSON.stringify(transactions));
+      render();
+    }
+  }
+
+  function resetForm() {
+    document.getElementById('editingId').value = '';
     document.getElementById('amount').value = '';
     document.getElementById('desc').value = '';
     document.getElementById('txDate').valueAsDate = new Date();
-    render();
+    document.getElementById('formTitle').innerText = 'إضافة عملية جديدة';
+    document.getElementById('saveBtn').innerText = 'حفظ العملية';
+    document.getElementById('cancelEditBtn').style.display = 'none';
   }
 
   function updateLimit() {
@@ -383,6 +439,10 @@
     list.innerHTML = '';
     let totalIncome = 0, totalExpense = 0;
 
+    if (transactions.length === 0) {
+      list.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:15px; font-size:13px;">لا توجد عمليات مسجلة حتى الآن</div>';
+    }
+
     transactions.forEach(t => {
       if (t.type === 'income') totalIncome += t.amount;
       else totalExpense += t.amount;
@@ -393,8 +453,14 @@
             <div class="item-title">${t.category}</div>
             <div class="item-sub">${t.desc} • <span style="direction:ltr; display:inline-block;">${t.date}</span></div>
           </div>
-          <div class="item-amount" style="color: ${t.type === 'income' ? '#059669' : '#dc2626'}">
-            ${t.type === 'income' ? '+' : '-'}${t.amount} <small>ر.س</small>
+          <div class="item-right">
+            <div class="item-amount" style="color: ${t.type === 'income' ? '#059669' : '#dc2626'}">
+              ${t.type === 'income' ? '+' : '-'}${t.amount} <small>ر.س</small>
+            </div>
+            <div class="item-actions">
+              <button class="btn-action btn-edit" onclick="editTransaction(${t.id})">تعديل ✏️</button>
+              <button class="btn-action btn-delete" onclick="deleteTransaction(${t.id})">حذف 🗑️</button>
+            </div>
           </div>
         </div>`;
     });
