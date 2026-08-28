@@ -5,22 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>تطبيق الميزانية الشخصية</title>
 
-  <!-- ==================== إعدادات أيقونة الشاشة الرئيسية (PWA) ==================== -->
-  <!-- اسم التطبيق عند الإضافة للشاشة الرئيسية -->
+  <!-- إعدادات أيقونة الشاشة الرئيسية (PWA) -->
   <meta name="apple-mobile-web-app-title" content="الميزانية">
   <meta name="application-name" content="الميزانية">
-  
-  <!-- جعل التطبيق يفتح بدون شريط المتصفح (مثل التطبيقات الأصلية) -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
-  <!-- أيقونة أجهزة أبل (iOS / iPhone) -->
   <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2845/2845722.png">
-  
-  <!-- أيقونة أجهزة أندرويد والمتصفحات -->
   <link rel="icon" type="image/png" sizes="192x192" href="https://cdn-icons-png.flaticon.com/512/2845/2845722.png">
   <link rel="icon" type="image/png" sizes="512x512" href="https://cdn-icons-png.flaticon.com/512/2845/2845722.png">
-  <!-- ========================================================================= -->
 
   <style>
     * { box-sizing: border-box; }
@@ -79,7 +72,7 @@
     /* Cards */
     .card {
       background: #ffffff;
-      padding: 18px;
+      padding: 20px;
       border-radius: 16px;
       margin-bottom: 16px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.03);
@@ -126,7 +119,7 @@
       background: #fff; 
       color: #1e293b; 
       outline: none; 
-      margin-bottom: 4px;
+      margin-bottom: 8px;
       box-sizing: border-box;
       -webkit-appearance: none;
     }
@@ -141,9 +134,19 @@
 
     button.btn-primary {
       width: 100%; padding: 14px; background: #f97316; color: white; border: none;
-      border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 14px;
+      border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 10px;
     }
     button.btn-export { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+
+    .toggle-auth {
+      font-size: 13px;
+      color: #ea580c;
+      text-decoration: underline;
+      cursor: pointer;
+      display: inline-block;
+      margin-top: 12px;
+      font-weight: 600;
+    }
 
     /* List Items */
     .item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
@@ -157,13 +160,23 @@
 
 <div class="container">
 
-  <!-- شاشة الدخول -->
+  <!-- شاشة الدخول والتسجيل -->
   <div id="authScreen" class="card" style="margin-top: 40px; text-align: center;">
-    <h2 style="color: #f97316; margin-top:0;">تطبيق الميزانية</h2>
-    <p style="color: #64748b; font-size: 14px;">سجل بريدك الإلكتروني للبدء بحفظ ميزانيتك</p>
+    <h2 style="color: #f97316; margin-top:0; margin-bottom: 6px;">تطبيق الميزانية</h2>
+    <p id="authSubtitle" style="color: #64748b; font-size: 14px; margin-bottom: 20px;">سجل بريدك الإلكتروني للبدء بحفظ ميزانيتك</p>
+    
     <input type="email" id="userEmailInput" placeholder="البريد الإلكتروني">
     <input type="password" id="userPassInput" placeholder="كلمة المرور">
-    <button class="btn-primary" onclick="login()">تسجيل الدخول</button>
+    
+    <div id="loginActions">
+      <button class="btn-primary" onclick="login()">تسجيل الدخول</button>
+      <span class="toggle-auth" onclick="toggleAuthMode('register')">ليس لديك حساب؟ إنشاء حساب جديد</span>
+    </div>
+
+    <div id="registerActions" style="display: none;">
+      <button class="btn-primary" onclick="register()">إنشاء الحساب</button>
+      <span class="toggle-auth" onclick="toggleAuthMode('login')">لديك حساب بالفعل؟ تسجيل الدخول</span>
+    </div>
   </div>
 
   <!-- الشاشة الرئيسية -->
@@ -242,6 +255,7 @@
 
 <script>
   let currentUser = localStorage.getItem('active_user') || null;
+  let usersDb = JSON.parse(localStorage.getItem('users_db')) || {};
   let transactions = [];
   let limit = 0;
 
@@ -252,16 +266,53 @@
 
   document.getElementById('txDate').valueAsDate = new Date();
 
-  function setType(type) {
-    document.getElementById('type').value = type;
-    document.getElementById('btnExpense').className = `type-btn ${type === 'expense' ? 'active expense' : ''}`;
-    document.getElementById('btnIncome').className = `type-btn ${type === 'income' ? 'active income' : ''}`;
-    updateCategories();
+  function toggleAuthMode(mode) {
+    const loginActions = document.getElementById('loginActions');
+    const registerActions = document.getElementById('registerActions');
+    const subtitle = document.getElementById('authSubtitle');
+
+    if (mode === 'register') {
+      loginActions.style.display = 'none';
+      registerActions.style.display = 'block';
+      subtitle.innerText = 'أدخل بياناتك لإنشاء حساب جديد';
+    } else {
+      loginActions.style.display = 'block';
+      registerActions.style.display = 'none';
+      subtitle.innerText = 'سجل بريدك الإلكتروني للبدء بحفظ ميزانيتك';
+    }
+  }
+
+  function register() {
+    const email = document.getElementById('userEmailInput').value.trim().toLowerCase();
+    const password = document.getElementById('userPassInput').value.trim();
+
+    if (!email || !password) return alert('الرجاء إدخال البريد الإلكتروني وكلمة المرور!');
+    if (usersDb[email]) return alert('هذا البريد الإلكتروني مسجل بالفعل، الرجاء تسجيل الدخول!');
+
+    // حفظ المستخدم الجديد
+    usersDb[email] = password;
+    localStorage.setItem('users_db', JSON.stringify(usersDb));
+
+    currentUser = email;
+    localStorage.setItem('active_user', currentUser);
+    alert('تم إنشاء الحساب بنجاح! 🎉');
+    initUserSession();
   }
 
   function login() {
     const email = document.getElementById('userEmailInput').value.trim().toLowerCase();
-    if (!email) return alert('الرجاء إدخال البريد الإلكتروني');
+    const password = document.getElementById('userPassInput').value.trim();
+
+    if (!email || !password) return alert('الرجاء إدخال البريد الإلكتروني وكلمة المرور!');
+    
+    // التحقق من وجود البريد وكلمة المرور
+    if (!usersDb[email]) {
+      return alert('البريد الإلكتروني غير مسجل! يرجى اضغط على "إنشاء حساب جديد".');
+    }
+    if (usersDb[email] !== password) {
+      return alert('كلمة المرور غير صحيحة! يرجى إعادة المحاولة.');
+    }
+
     currentUser = email;
     localStorage.setItem('active_user', currentUser);
     initUserSession();
@@ -270,8 +321,11 @@
   function logout() {
     localStorage.removeItem('active_user');
     currentUser = null;
+    document.getElementById('userEmailInput').value = '';
+    document.getElementById('userPassInput').value = '';
     document.getElementById('authScreen').style.display = 'block';
     document.getElementById('appScreen').style.display = 'none';
+    toggleAuthMode('login');
   }
 
   function initUserSession() {
@@ -286,6 +340,13 @@
     limit = parseFloat(localStorage.getItem(`limit_${currentUser}`)) || 0;
     updateCategories();
     render();
+  }
+
+  function setType(type) {
+    document.getElementById('type').value = type;
+    document.getElementById('btnExpense').className = `type-btn ${type === 'expense' ? 'active expense' : ''}`;
+    document.getElementById('btnIncome').className = `type-btn ${type === 'income' ? 'active income' : ''}`;
+    updateCategories();
   }
 
   function updateCategories() {
@@ -361,7 +422,7 @@
     a.click();
   }
 
-  if (currentUser) initUserSession();
+  if (currentUser && usersDb[currentUser]) initUserSession();
 </script>
 </body>
 </html>
