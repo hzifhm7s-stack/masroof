@@ -777,3 +777,36 @@
 </script>
 </body>
 </html>
+<script>
+  // تسجيل Service Worker لتمكين العمل بدون انترنت
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      const swCode = `
+        const CACHE_NAME = 'my-app-cache-v1';
+        const urlsToCache = ['./', index.html'];
+
+        self.addEventListener('install', event => {
+          event.waitUntil(
+            caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
+          );
+        });
+
+        self.addEventListener('fetch', event => {
+          event.respondWith(
+            caches.match(event.request).then(response => {
+              return response || fetch(event.request);
+            })
+          );
+        });
+      `;
+
+      const blob = new Blob([swCode], { type: 'application/javascript' });
+      const blobUrl = URL.createObjectURL(blob);
+
+      navigator.serviceWorker.register(blobUrl)
+        .then(reg => console.log('جاهز للعمل بدون انترنت:', reg))
+        .catch(err => console.log('خطأ في التسجيل:', err));
+    });
+  }
+</script>
+
