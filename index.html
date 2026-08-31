@@ -210,11 +210,11 @@
       <div class="stats-grid">
         <div class="stat-box income">
           <span class="stat-label">إجمالي الدخل ↗️</span>
-          <div class="stat-amount" id="totalIncome">+0 ر.س</div>
+          <div class="stat-amount" id="totalIncome">+0.00 ر.س</div>
         </div>
         <div class="stat-box expense">
           <span class="stat-label">إجمالي المصاريف ↘️</span>
-          <div class="stat-amount" id="totalExpense">-0 ر.س</div>
+          <div class="stat-amount" id="totalExpense">-0.00 ر.س</div>
         </div>
       </div>
 
@@ -241,7 +241,7 @@
       <select id="category"></select>
 
       <label>المبلغ (ر.س):</label>
-      <input type="number" id="amount" placeholder="0.00">
+      <input type="number" step="0.01" id="amount" placeholder="0.00">
 
       <label>الوصف:</label>
       <input type="text" id="desc" placeholder="مثال: مقاضي، فاتورة الكهرباء">
@@ -377,13 +377,11 @@
     if (!amount) return alert('الرجاء إدخال المبلغ');
 
     if (editingId) {
-      // تعديل عملية سابقة
       const index = transactions.findIndex(t => t.id == editingId);
       if (index !== -1) {
         transactions[index] = { id: Number(editingId), type, category, amount, desc, date: customDate };
       }
     } else {
-      // إضافة عملية جديدة
       transactions.unshift({ id: Date.now(), type, category, amount, desc, date: customDate });
     }
 
@@ -455,7 +453,7 @@
           </div>
           <div class="item-right">
             <div class="item-amount" style="color: ${t.type === 'income' ? '#059669' : '#dc2626'}">
-              ${t.type === 'income' ? '+' : '-'}${t.amount} <small>ر.س</small>
+              ${t.type === 'income' ? '+' : '-'}${t.amount.toFixed(2)} <small>ر.س</small>
             </div>
             <div class="item-actions">
               <button class="btn-action btn-edit" onclick="editTransaction(${t.id})">تعديل ✏️</button>
@@ -465,9 +463,10 @@
         </div>`;
     });
 
+    // تقريب جميع المبالغ لرقمين عشريين لمنع ظهور الأرقام الطويلة
     document.getElementById('balance').innerText = (totalIncome - totalExpense).toFixed(2);
-    document.getElementById('totalIncome').innerText = `+${totalIncome} ر.س`;
-    document.getElementById('totalExpense').innerText = `-${totalExpense} ر.س`;
+    document.getElementById('totalIncome').innerText = `+${totalIncome.toFixed(2)} ر.س`;
+    document.getElementById('totalExpense').innerText = `-${totalExpense.toFixed(2)} ر.س`;
     document.getElementById('budgetLimit').value = limit || '';
 
     if (limit > 0) {
