@@ -51,13 +51,14 @@
       color: #f8fafc;
     }
     body.dark-mode .user-info { color: #cbd5e1; }
-    body.dark-mode .btn-logout-icon { background: #334155; color: #cbd5e1; }
+    body.dark-mode .btn-icon { background: #334155; color: #cbd5e1; }
     body.dark-mode .type-selector { background: #0f172a; }
     body.dark-mode .type-btn.active.expense { background: #1e293b; color: #ef4444; }
     body.dark-mode .type-btn.active.income { background: #1e293b; color: #10b981; }
     body.dark-mode .filter-btn { background: #0f172a; color: #94a3b8; border-color: #334155; }
     body.dark-mode .filter-btn.active { background: #f97316; color: white; border-color: #f97316; }
     body.dark-mode .item { border-bottom-color: #334155; }
+    body.dark-mode .category-budget-item { border-bottom-color: #334155; }
 
     .container { max-width: 480px; margin: 0 auto; }
     
@@ -105,6 +106,18 @@
     }
     .btn-icon:active { background: #fee2e2; color: #dc2626; }
 
+    /* Alert Banner */
+    .alert-banner {
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      display: none;
+    }
+    .alert-banner.warning { background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; }
+    .alert-banner.danger { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+
     /* Cards */
     .card {
       background: #ffffff;
@@ -133,6 +146,14 @@
     /* Progress Bar */
     .progress-bar { background: #e2e8f0; height: 8px; border-radius: 99px; overflow: hidden; margin-top: 8px; }
     .progress-fill { background: #f97316; height: 100%; width: 0%; transition: width 0.3s; }
+
+    /* Category Budgets Items */
+    .category-budget-item {
+      padding: 8px 0;
+      border-bottom: 1px dashed #e2e8f0;
+    }
+    .category-budget-item:last-child { border-bottom: none; }
+    .cat-budget-header { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
 
     /* Form & Inputs */
     h3 { margin: 0 0 14px 0; font-size: 16px; color: #0f172a; }
@@ -247,6 +268,9 @@
       </div>
     </div>
 
+    <!-- شريط التنبيهات التفاعلي -->
+    <div id="alertBanner" class="alert-banner"></div>
+
     <!-- بطاقة اختر الشهر -->
     <div class="card" style="padding: 12px 20px; margin-bottom: 12px;">
       <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -272,10 +296,21 @@
       </div>
 
       <div>
-        <label style="margin-top:0;">سقف المصاريف الشهري:</label>
+        <label style="margin-top:0;">سقف المصاريف الشهري الإجمالي:</label>
         <input type="number" id="budgetLimit" placeholder="حدد الحد الأقصى للمصاريف" onchange="updateLimit()">
         <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
       </div>
+    </div>
+
+    <!-- بطاقة ميزانيات التصنيفات (Category Budgets) -->
+    <div class="card">
+      <h3>تحديد سقف الإنفاق للتصنيف 🎯</h3>
+      <div style="display: flex; gap: 8px;">
+        <select id="catLimitSelect" style="margin-bottom:0; flex:1;"></select>
+        <input type="number" id="catLimitAmount" placeholder="المبلغ" style="margin-bottom:0; width: 100px;">
+        <button class="btn-primary" style="margin-top:0; width: auto; padding: 0 16px;" onclick="saveCategoryLimit()">حفظ</button>
+      </div>
+      <div id="categoryBudgetsList" style="margin-top: 14px;"></div>
     </div>
 
     <!-- بطاقة الرسم البياني -->
@@ -342,6 +377,7 @@
   let usersDb = JSON.parse(localStorage.getItem('users_db')) || {};
   let transactions = [];
   let limit = 0;
+  let categoryLimits = {};
   let currentFilter = 'all';
   let chartInstance = null;
 
@@ -437,7 +473,10 @@
 
     transactions = JSON.parse(localStorage.getItem(`budget_${currentUser}`)) || [];
     limit = parseFloat(localStorage.getItem(`limit_${currentUser}`)) || 0;
+    categoryLimits = JSON.parse(localStorage.getItem(`cat_limits_${currentUser}`)) || {};
+    
     updateCategories();
+    populateCatLimitDropdown();
     render();
   }
 
@@ -452,6 +491,26 @@
     const type = document.getElementById('type').value;
     const catSelect = document.getElementById('category');
     catSelect.innerHTML = categories[type].map(c => `<option value="${c}">${c}</option>`).join('');
+  }
+
+  function populateCatLimitDropdown() {
+    const sel = document.getElementById('catLimitSelect');
+    sel.innerHTML = categories.expense.map(c => `<option value="${c}">${c}</option>`).join('');
+  }
+
+  function saveCategoryLimit() {
+    const cat = document.getElementById('catLimitSelect').value;
+    const amount = parseFloat(document.getElementById('catLimitAmount').value);
+
+    if (isNaN(amount) || amount <= 0) {
+      delete categoryLimits[cat];
+    } else {
+      categoryLimits[cat] = amount;
+    }
+
+    localStorage.setItem(`cat_limits_${currentUser}`, JSON.stringify(categoryLimits));
+    document.getElementById('catLimitAmount').value = '';
+    render();
   }
 
   function addTransaction() {
@@ -582,7 +641,66 @@
       }
     });
 
-    // 2. تصفية السجل المعروض بناءً على الفلتر والبحث داخل نفس الشهر
+    // 2. تحديث قائمة أسقف الإنفاق للتصنيفات
+    const catBudgetsList = document.getElementById('categoryBudgetsList');
+    catBudgetsList.innerHTML = '';
+    let hasOverBudgetCat = false;
+    let overBudgetCats = [];
+
+    Object.keys(categoryLimits).forEach(cat => {
+      const catSpent = expenseByCategory[cat] || 0;
+      const catMax = categoryLimits[cat];
+      const catPerc = Math.min((catSpent / catMax) * 100, 100);
+      const isOver = catSpent > catMax;
+
+      if (isOver) {
+        hasOverBudgetCat = true;
+        overBudgetCats.push(cat);
+      }
+
+      catBudgetsList.innerHTML += `
+        <div class="category-budget-item">
+          <div class="cat-budget-header">
+            <span>${cat}</span>
+            <span style="color: ${isOver ? '#dc2626' : '#64748b'};">
+              ${catSpent.toFixed(2)} / ${catMax.toFixed(2)} ر.س
+            </span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: ${catPerc}%; background: ${isOver ? '#dc2626' : '#3b82f6'};"></div>
+          </div>
+        </div>`;
+    });
+
+    if (Object.keys(categoryLimits).length === 0) {
+      catBudgetsList.innerHTML = '<div style="font-size:12px; color:#94a3b8; text-align:center;">لم يتم تحديد سقف لأي تصنيف بعد</div>';
+    }
+
+    // 3. التنبيهات الذكية
+    const alertBanner = document.getElementById('alertBanner');
+    let alertMsg = '';
+    let alertType = '';
+
+    if (limit > 0 && totalExpense > limit) {
+      alertMsg = `⚠️ تنبيه: لقد تجاوزت سقف الميزانية الإجمالي بمقدار ${(totalExpense - limit).toFixed(2)} ر.س!`;
+      alertType = 'danger';
+    } else if (limit > 0 && totalExpense >= limit * 0.85) {
+      alertMsg = `⚡ تنبيه: اقتربت من تجاوز سقف الميزانية الإجمالي (${((totalExpense / limit) * 100).toFixed(0)}%).`;
+      alertType = 'warning';
+    } else if (hasOverBudgetCat) {
+      alertMsg = `⚠️ تنبيه: تجاوزت السقف المخصص لتصنيف (${overBudgetCats.join('، ')})!`;
+      alertType = 'danger';
+    }
+
+    if (alertMsg) {
+      alertBanner.style.display = 'block';
+      alertBanner.className = `alert-banner ${alertType}`;
+      alertBanner.innerText = alertMsg;
+    } else {
+      alertBanner.style.display = 'none';
+    }
+
+    // 4. تصفية السجل المعروض بناءً على الفلتر والبحث
     const filtered = monthTransactions.filter(t => {
       const matchFilter = currentFilter === 'all' || t.type === currentFilter;
       const matchSearch = t.desc.toLowerCase().includes(searchVal) || t.category.toLowerCase().includes(searchVal);
@@ -636,6 +754,23 @@
     a.href = URL.createObjectURL(blob);
     a.download = `ميزانية_${currentUser}.csv`;
     a.click();
+  }
+
+  // تسجيل الخدمة للعمل بدون إنترنت (PWA Offline Service Worker)
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      const swCode = `
+        const CACHE_NAME = 'budget-app-v1';
+        self.addEventListener('install', e => {
+          e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(['/'])));
+        });
+        self.addEventListener('fetch', e => {
+          e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+        });
+      `;
+      const blob = new Blob([swCode], { type: 'application/javascript' });
+      navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
+    });
   }
 
   if (currentUser && usersDb[currentUser]) initUserSession();
