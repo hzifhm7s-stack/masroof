@@ -59,6 +59,7 @@
     body.dark-mode .filter-btn.active { background: #f97316; color: white; border-color: #f97316; }
     body.dark-mode .item { border-bottom-color: #334155; }
     body.dark-mode .category-budget-item { border-bottom-color: #334155; }
+    body.dark-mode .carried-balance-box { background: #0f172a; border-color: #334155; }
 
     .container { max-width: 480px; margin: 0 auto; }
     
@@ -130,8 +131,21 @@
     }
     
     .balance-title { font-size: 13px; color: #64748b; margin-bottom: 2px; }
-    .balance { font-size: 28px; font-weight: 800; color: #0f172a; margin-bottom: 14px; }
+    .balance { font-size: 28px; font-weight: 800; color: #0f172a; margin-bottom: 12px; }
     
+    .carried-balance-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      color: #475569;
+    }
+
     .stats-grid { display: flex; gap: 10px; margin-bottom: 14px; }
     .stat-box { flex: 1; padding: 12px; border-radius: 12px; }
     .stat-box.income { background: #ecfdf5; border: 1px solid #a7f3d0; }
@@ -279,18 +293,24 @@
       </div>
     </div>
 
-    <!-- بطاقة الملخص -->
+    <!-- بطاقة الملخص والرصيد -->
     <div class="card">
-      <div class="balance-title">صافي الرصيد للشهر المحدد</div>
+      <div class="balance-title">إجمالي الرصيد المتوفر حتّى الآن</div>
       <div class="balance"><span id="balance">0.00</span> <small style="font-size:16px;">ر.س</small></div>
       
+      <!-- شريط الرصيد المرحّل من الأشهُر السابقة -->
+      <div class="carried-balance-box">
+        <span>🔄 الرصيد المرحّل من الأشهر السابقة:</span>
+        <span id="carriedBalance" style="font-weight: 700;">0.00 ر.س</span>
+      </div>
+
       <div class="stats-grid">
         <div class="stat-box income">
-          <span class="stat-label">إجمالي الدخل ↗️</span>
+          <span class="stat-label">دخل الشهر المحدد ↗️</span>
           <div class="stat-amount" id="totalIncome">+0.00 ر.س</div>
         </div>
         <div class="stat-box expense">
-          <span class="stat-label">إجمالي المصاريف ↘️</span>
+          <span class="stat-label">مصاريف الشهر المحدد ↘️</span>
           <div class="stat-amount" id="totalExpense">-0.00 ر.س</div>
         </div>
       </div>
@@ -315,7 +335,7 @@
 
     <!-- بطاقة الرسم البياني -->
     <div class="card" id="chartCard">
-      <h3>تحليل المصاريف 📊</h3>
+      <h3>تحليل مصاريف الشهر 📊</h3>
       <div style="position: relative; height:220px; width:100%;">
         <canvas id="expenseChart"></canvas>
       </div>
@@ -352,7 +372,7 @@
     <!-- السجل -->
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-        <h3 style="margin:0;">سجل العمليات</h3>
+        <h3 style="margin:0;">سجل العمليات للشهر المحدد</h3>
         <button class="btn-export" onclick="exportCSV()">تصدير CSV</button>
       </div>
 
@@ -391,7 +411,6 @@
   document.getElementById('txDate').valueAsDate = today;
   document.getElementById('monthFilter').value = today.toISOString().slice(0, 7);
 
-  // تفعيل الوضع الداكن بناءً على التخزين
   if (localStorage.getItem('theme') === 'dark') {
     document.body.classList.add('dark-mode');
   }
@@ -626,18 +645,27 @@
     const selectedMonth = document.getElementById('monthFilter').value; // YYYY-MM
     list.innerHTML = '';
 
+    let carriedBalance = 0;
     let totalIncome = 0, totalExpense = 0;
     let expenseByCategory = {};
 
-    // 1. تصفية الحسابات بناءً على الشهر المحدد فقط
-    const monthTransactions = transactions.filter(t => t.date && t.date.startsWith(selectedMonth));
+    // 1. حساب الرصيد التراكمي المرحّل من الأشهر السابقة + حساب عمليات الشهر المحدد
+    transactions.forEach(t => {
+      if (!t.date) return;
+      const tMonth = t.date.slice(0, 7);
 
-    monthTransactions.forEach(t => {
-      if (t.type === 'income') {
-        totalIncome += t.amount;
-      } else {
-        totalExpense += t.amount;
-        expenseByCategory[t.category] = (expenseByCategory[t.category] || 0) + t.amount;
+      if (tMonth < selectedMonth) {
+        // عمليات الأشهر السابقة تتراكم في الرصيد المرحّل
+        if (t.type === 'income') carriedBalance += t.amount;
+        else carriedBalance -= t.amount;
+      } else if (tMonth === selectedMonth) {
+        // عمليات الشهر المحدد
+        if (t.type === 'income') {
+          totalIncome += t.amount;
+        } else {
+          totalExpense += t.amount;
+          expenseByCategory[t.category] = (expenseByCategory[t.category] || 0) + t.amount;
+        }
       }
     });
 
@@ -682,7 +710,7 @@
     let alertType = '';
 
     if (limit > 0 && totalExpense > limit) {
-      alertMsg = `⚠️ تنبيه: لقد تجاوزت سقف الميزانية الإجمالي بمقدار ${(totalExpense - limit).toFixed(2)} ر.س!`;
+      alertMsg = `⚠️ تنبيه: لقد تجاوزت سقف الميزانية الإجمالي لشهر (${selectedMonth}) بمقدار ${(totalExpense - limit).toFixed(2)} ر.س!`;
       alertType = 'danger';
     } else if (limit > 0 && totalExpense >= limit * 0.85) {
       alertMsg = `⚡ تنبيه: اقتربت من تجاوز سقف الميزانية الإجمالي (${((totalExpense / limit) * 100).toFixed(0)}%).`;
@@ -700,7 +728,8 @@
       alertBanner.style.display = 'none';
     }
 
-    // 4. تصفية السجل المعروض بناءً على الفلتر والبحث
+    // 4. تصفية السجل المعروض للشهر المحدد
+    const monthTransactions = transactions.filter(t => t.date && t.date.startsWith(selectedMonth));
     const filtered = monthTransactions.filter(t => {
       const matchFilter = currentFilter === 'all' || t.type === currentFilter;
       const matchSearch = t.desc.toLowerCase().includes(searchVal) || t.category.toLowerCase().includes(searchVal);
@@ -730,8 +759,16 @@
         </div>`;
     });
 
-    // تحديث الأرقام والـ Chart
-    document.getElementById('balance').innerText = (totalIncome - totalExpense).toFixed(2);
+    // حساب الرصيد الإجمالي التراكمي النهائي
+    const finalBalance = carriedBalance + totalIncome - totalExpense;
+
+    document.getElementById('balance').innerText = finalBalance.toFixed(2);
+    
+    // عرض الرصيد المرحّل
+    const carriedEl = document.getElementById('carriedBalance');
+    carriedEl.innerText = `${carriedBalance >= 0 ? '+' : ''}${carriedBalance.toFixed(2)} ر.س`;
+    carriedEl.style.color = carriedBalance >= 0 ? '#059669' : '#dc2626';
+
     document.getElementById('totalIncome').innerText = `+${totalIncome.toFixed(2)} ر.س`;
     document.getElementById('totalExpense').innerText = `-${totalExpense.toFixed(2)} ر.س`;
     document.getElementById('budgetLimit').value = limit || '';
@@ -756,14 +793,12 @@
     a.click();
   }
 
-  // تسجيل الخدمة للعمل بدون إنترنت (PWA Offline Service Worker)
+  // تسجيل الخدمة للعمل بدون إنترنت (Service Worker)
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       const swCode = `
-        const CACHE_NAME = 'budget-app-v1';
-        self.addEventListener('install', e => {
-          e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(['/'])));
-        });
+        const CACHE_NAME = 'budget-app-v3';
+        self.addEventListener('install', e => { self.skipWaiting(); });
         self.addEventListener('fetch', e => {
           e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
         });
